@@ -193,6 +193,7 @@ const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const TEAM = ["Maru", "Rodrigo", "Miriam", "Alex", "Fernando"];
+const RESPONSABLES = [...TEAM, "Todos"];
 
 const ESTADOS = [
   { key: "pendiente", label: "Pendiente" },
@@ -321,7 +322,7 @@ function ActivityModal({ activity, currentUser, onClose, onSave, onDelete }) {
           <div className="field">
             <label>Responsable</label>
             <select value={responsable} onChange={(e) => setResponsable(e.target.value)}>
-              {TEAM.map((n) => <option key={n} value={n}>{n}</option>)}
+              {RESPONSABLES.map((n) => <option key={n} value={n}>{n}</option>)}
             </select>
           </div>
           <div className="field">
@@ -392,8 +393,8 @@ function ListaView({ activities, onEdit }) {
     <div>
       <div className="filters">
         <select value={filterResp} onChange={(e) => setFilterResp(e.target.value)}>
-          <option value="todos">Todos los responsables</option>
-          {TEAM.map((n) => <option key={n} value={n}>{n}</option>)}
+          <option value="todos">— Todos los responsables —</option>
+          {RESPONSABLES.map((n) => <option key={n} value={n}>{n}</option>)}
         </select>
         <select value={filterEstado} onChange={(e) => setFilterEstado(e.target.value)}>
           <option value="todos">Todos los estados</option>
