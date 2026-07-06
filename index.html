@@ -306,6 +306,50 @@ function ActivityModal({ activity, currentUser, onClose, onSave, onDelete }) {
   const [prioridad, setPrioridad] = useState(activity?.prioridad || "media");
   const [estado, setEstado] = useState(activity?.estado || "pendiente");
 
+  const [subtasks, setSubtasks] = useState([]);
+  const [newSubtask, setNewSubtask] = useState("");
+
+  useEffect(() => {
+    if (activity?.id) loadSubtasks();
+  }, [activity?.id]);
+
+  async function loadSubtasks() {
+    const { data, error } = await supabase
+      .from("seg_subtasks")
+      .select("*")
+      .eq("activity_id", activity.id)
+      .order("created_at", { ascending: true });
+    if (!error && data) setSubtasks(data);
+  }
+
+  async function addSubtask() {
+    if (!newSubtask.trim() || !activity?.id) return;
+    const { data, error } = await supabase
+      .from("seg_subtasks")
+      .insert({ activity_id: activity.id, titulo: newSubtask.trim() })
+      .select()
+      .single();
+    if (!error && data) {
+      setSubtasks([...subtasks, data]);
+      setNewSubtask("");
+    }
+  }
+
+  async function toggleSubtask(sub) {
+    const { data, error } = await supabase
+      .from("seg_subtasks")
+      .update({ completado: !sub.completado })
+      .eq("id", sub.id)
+      .select()
+      .single();
+    if (!error && data) setSubtasks(subtasks.map((s) => (s.id === sub.id ? data : s)));
+  }
+
+  async function deleteSubtask(id) {
+    await supabase.from("seg_subtasks").delete().eq("id", id);
+    setSubtasks(subtasks.filter((s) => s.id !== id));
+  }
+
   return (
     <div className="overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="modal">
@@ -344,6 +388,47 @@ function ActivityModal({ activity, currentUser, onClose, onSave, onDelete }) {
             </select>
           </div>
         </div>
+        <div className="field">
+          <label>
+            Subactividades
+            {subtasks.length > 0 && (
+              <span style={{ fontWeight: 400, color: "var(--stone)" }}>
+                {" "}({subtasks.filter((s) => s.completado).length}/{subtasks.length})
+              </span>
+            )}
+          </label>
+          {!activity?.id ? (
+            <div style={{ fontSize: 12, color: "var(--stone)" }}>
+              Guarda la actividad primero para poder agregar subactividades.
+            </div>
+          ) : (
+            <React.Fragment>
+              {subtasks.map((s) => (
+                <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                  <input type="checkbox" checked={s.completado} onChange={() => toggleSubtask(s)} />
+                  <span style={{
+                    flex: 1, fontSize: 13,
+                    textDecoration: s.completado ? "line-through" : "none",
+                    color: s.completado ? "var(--stone)" : "var(--charcoal)",
+                  }}>
+                    {s.titulo}
+                  </span>
+                  <button className="icon-btn" onClick={() => deleteSubtask(s.id)}>✕</button>
+                </div>
+              ))}
+              <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+                <input
+                  style={{ flex: 1 }}
+                  value={newSubtask}
+                  onChange={(e) => setNewSubtask(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && addSubtask()}
+                  placeholder="Nueva subactividad"
+                />
+                <button className="btn secondary small" onClick={addSubtask}>+ Agregar</button>
+              </div>
+            </React.Fragment>
+          )}
+        </div>
         <div className="modal-actions">
           {activity && (
             <button className="btn danger" style={{ marginRight: "auto" }} onClick={() => onDelete(activity.id)}>
@@ -369,7 +454,7 @@ function ActivityModal({ activity, currentUser, onClose, onSave, onDelete }) {
 // ============================================================
 // VISTA: Lista
 // ============================================================
-function ListaView({ activities, onEdit }) {
+function ListaView({ activities, subtaskCounts, onEdit }) {
   const [filterResp, setFilterResp] = useState("todos");
   const [filterEstado, setFilterEstado] = useState("todos");
   const [sortBy, setSortBy] = useState("fecha_limite");
@@ -423,7 +508,14 @@ function ListaView({ activities, onEdit }) {
           <tbody>
             {filtered.map((a) => (
               <tr key={a.id} className={isOverdue(a) ? "overdue" : ""}>
-                <td>{a.titulo}</td>
+                <td>
+                  {a.titulo}
+                  {subtaskCounts[a.id] && (
+                    <span style={{ marginLeft: 6, fontSize: 11, color: "var(--stone)" }}>
+                      ({subtaskCounts[a.id].completado}/{subtaskCounts[a.id].total})
+                    </span>
+                  )}
+                </td>
                 <td>{a.responsable}</td>
                 <td className="fecha">{a.fecha_limite || "—"}</td>
                 <td><span className={`badge ${a.prioridad}`}>{a.prioridad}</span></td>
@@ -443,7 +535,7 @@ function ListaView({ activities, onEdit }) {
 // ============================================================
 // VISTA: Kanban
 // ============================================================
-function KanbanView({ activities, onEdit, onQuickMove }) {
+function KanbanView({ activities, subtaskCounts, onEdit, onQuickMove }) {
   return (
     <div className="kanban">
       {ESTADOS.map((col) => {
@@ -453,7 +545,14 @@ function KanbanView({ activities, onEdit, onQuickMove }) {
             <h3>{col.label} <span>{items.length}</span></h3>
             {items.map((a) => (
               <div className="kanban-card" key={a.id} onClick={() => onEdit(a)}>
-                <div className="titulo">{a.titulo}</div>
+                <div className="titulo">
+                  {a.titulo}
+                  {subtaskCounts[a.id] && (
+                    <span style={{ marginLeft: 6, fontSize: 11, color: "var(--stone)", fontWeight: 400 }}>
+                      ({subtaskCounts[a.id].completado}/{subtaskCounts[a.id].total})
+                    </span>
+                  )}
+                </div>
                 <div className="meta">
                   <span>{a.responsable}</span>
                   <span className={isOverdue(a) ? "overdue" : ""} style={isOverdue(a) ? { color: "var(--red)", fontWeight: 600 } : {}}>
@@ -544,6 +643,7 @@ function App() {
   const [projects, setProjects] = useState([]);
   const [activeProjectId, setActiveProjectId] = useState(null);
   const [activities, setActivities] = useState([]);
+  const [subtaskCounts, setSubtaskCounts] = useState({});
   const [view, setView] = useState("lista");
   const [showProjectModal, setShowProjectModal] = useState(false);
   const [editingProject, setEditingProject] = useState(null);
@@ -580,7 +680,30 @@ function App() {
       .select("*")
       .eq("project_id", projectId)
       .order("fecha_limite", { ascending: true });
-    if (!error && data) setActivities(data);
+    if (!error && data) {
+      setActivities(data);
+      loadSubtaskCounts(data.map((a) => a.id));
+    }
+  }
+
+  async function loadSubtaskCounts(activityIds) {
+    if (!activityIds || activityIds.length === 0) {
+      setSubtaskCounts({});
+      return;
+    }
+    const { data, error } = await supabase
+      .from("seg_subtasks")
+      .select("activity_id, completado")
+      .in("activity_id", activityIds);
+    if (!error && data) {
+      const counts = {};
+      data.forEach((s) => {
+        if (!counts[s.activity_id]) counts[s.activity_id] = { total: 0, completado: 0 };
+        counts[s.activity_id].total += 1;
+        if (s.completado) counts[s.activity_id].completado += 1;
+      });
+      setSubtaskCounts(counts);
+    }
   }
 
   function login(name) {
@@ -607,11 +730,21 @@ function App() {
   async function saveActivity(fields) {
     if (editingActivity) {
       await supabase.from("seg_activities").update(fields).eq("id", editingActivity.id);
+      setShowActivityModal(false);
+      setEditingActivity(null);
     } else {
-      await supabase.from("seg_activities").insert({ ...fields, project_id: activeProjectId, created_by: user });
+      const { data } = await supabase
+        .from("seg_activities")
+        .insert({ ...fields, project_id: activeProjectId, created_by: user })
+        .select()
+        .single();
+      if (data) {
+        // dejamos el modal abierto, ahora en modo edición, para poder agregar subactividades
+        setEditingActivity(data);
+      } else {
+        setShowActivityModal(false);
+      }
     }
-    setShowActivityModal(false);
-    setEditingActivity(null);
     loadActivities(activeProjectId);
   }
 
@@ -678,8 +811,8 @@ function App() {
           <div className="empty">Crea tu primer proyecto para empezar a dar seguimiento.</div>
         ) : (
           <React.Fragment>
-            {view === "lista" && <ListaView activities={activities} onEdit={(a) => { setEditingActivity(a); setShowActivityModal(true); }} />}
-            {view === "kanban" && <KanbanView activities={activities} onEdit={(a) => { setEditingActivity(a); setShowActivityModal(true); }} />}
+            {view === "lista" && <ListaView activities={activities} subtaskCounts={subtaskCounts} onEdit={(a) => { setEditingActivity(a); setShowActivityModal(true); }} />}
+            {view === "kanban" && <KanbanView activities={activities} subtaskCounts={subtaskCounts} onEdit={(a) => { setEditingActivity(a); setShowActivityModal(true); }} />}
             {view === "calendario" && <CalendarView activities={activities} onEdit={(a) => { setEditingActivity(a); setShowActivityModal(true); }} />}
           </React.Fragment>
         )}
