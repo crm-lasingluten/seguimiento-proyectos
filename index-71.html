@@ -1,0 +1,710 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Seguimiento de Proyectos · La Sin Gluten</title>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    --cream:#F7F5F0;
+    --sage:#5B7B6B;
+    --sage-dark:#3F5A4D;
+    --stone:#8B8578;
+    --charcoal:#2B2B28;
+    --line:#E3DFD5;
+    --white:#FFFFFF;
+    --red:#B4553F;
+    --amber:#C08A3E;
+    --blue:#4A6B8A;
+    --radius:10px;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+    background:var(--cream);
+    color:var(--charcoal);
+  }
+  #root{min-height:100vh;display:flex;flex-direction:column;}
+
+  /* ---------- Login simple ---------- */
+  .login-screen{
+    flex:1;display:flex;align-items:center;justify-content:center;
+    flex-direction:column;gap:24px;
+  }
+  .login-card{
+    background:var(--white);border:1px solid var(--line);border-radius:var(--radius);
+    padding:32px;width:320px;box-shadow:0 2px 12px rgba(0,0,0,0.04);
+  }
+  .login-card h1{font-size:20px;margin:0 0 4px;}
+  .login-card p{color:var(--stone);font-size:13px;margin:0 0 20px;}
+  .user-btn{
+    display:block;width:100%;text-align:left;padding:12px 14px;margin-bottom:8px;
+    border:1px solid var(--line);border-radius:8px;background:var(--white);
+    font-size:14px;cursor:pointer;transition:all .15s;color:var(--charcoal);
+  }
+  .user-btn:hover{border-color:var(--sage);background:#F2F6F3;}
+
+  /* ---------- Layout ---------- */
+  .topbar{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:14px 24px;background:var(--white);border-bottom:1px solid var(--line);
+    position:sticky;top:0;z-index:10;
+  }
+  .topbar-left{display:flex;align-items:center;gap:16px;}
+  .brand{font-weight:600;font-size:15px;color:var(--sage-dark);}
+  .user-chip{
+    display:flex;align-items:center;gap:8px;font-size:13px;color:var(--stone);
+  }
+  .avatar{
+    width:26px;height:26px;border-radius:50%;background:var(--sage);color:white;
+    display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;
+  }
+  .logout{background:none;border:none;color:var(--stone);cursor:pointer;font-size:13px;text-decoration:underline;}
+
+  .project-bar{
+    display:flex;align-items:center;gap:12px;padding:14px 24px;flex-wrap:wrap;
+    background:var(--white);border-bottom:1px solid var(--line);
+  }
+  select, input, textarea{
+    font-family:inherit;font-size:13px;padding:8px 10px;border:1px solid var(--line);
+    border-radius:7px;background:var(--white);color:var(--charcoal);
+  }
+  .project-select{min-width:220px;font-weight:600;}
+  .btn{
+    padding:8px 14px;border-radius:7px;border:1px solid var(--sage);background:var(--sage);
+    color:white;font-size:13px;cursor:pointer;font-weight:500;transition:opacity .15s;
+  }
+  .btn:hover{opacity:.9;}
+  .btn.secondary{background:var(--white);color:var(--sage-dark);border-color:var(--line);}
+  .btn.danger{background:var(--white);color:var(--red);border-color:var(--red);}
+  .btn.small{padding:5px 10px;font-size:12px;}
+
+  .view-tabs{display:flex;gap:4px;margin-left:auto;}
+  .view-tab{
+    padding:7px 14px;border-radius:7px;font-size:13px;cursor:pointer;color:var(--stone);
+    border:1px solid transparent;
+  }
+  .view-tab.active{background:var(--sage-dark);color:white;}
+
+  main{flex:1;padding:20px 24px;max-width:1300px;width:100%;margin:0 auto;}
+  .empty{
+    text-align:center;padding:60px 20px;color:var(--stone);
+  }
+
+  /* ---------- Lista ---------- */
+  .filters{display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;}
+  table{width:100%;border-collapse:collapse;background:var(--white);border-radius:var(--radius);overflow:hidden;border:1px solid var(--line);}
+  th,td{padding:10px 12px;text-align:left;font-size:13px;border-bottom:1px solid var(--line);}
+  th{background:#FAFAF7;color:var(--stone);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.03em;}
+  tr:last-child td{border-bottom:none;}
+  tr.overdue td.fecha{color:var(--red);font-weight:600;}
+
+  .badge{
+    display:inline-block;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:600;
+  }
+  .badge.pendiente{background:#F0EDE5;color:var(--stone);}
+  .badge.en_progreso{background:#E7EEF5;color:var(--blue);}
+  .badge.completado{background:#E9F1EC;color:var(--sage-dark);}
+  .badge.bloqueado{background:#F7E9E5;color:var(--red);}
+  .badge.alta{background:#F7E9E5;color:var(--red);}
+  .badge.media{background:#FBF1E3;color:var(--amber);}
+  .badge.baja{background:#EFEFEC;color:var(--stone);}
+
+  .row-actions{display:flex;gap:6px;}
+  .icon-btn{background:none;border:none;cursor:pointer;font-size:14px;color:var(--stone);padding:2px 4px;}
+  .icon-btn:hover{color:var(--charcoal);}
+
+  /* ---------- Kanban ---------- */
+  .kanban{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;align-items:start;}
+  .kanban-col{background:#FAFAF7;border:1px solid var(--line);border-radius:var(--radius);padding:12px;min-height:200px;}
+  .kanban-col h3{font-size:12px;text-transform:uppercase;letter-spacing:.03em;color:var(--stone);margin:0 0 10px;display:flex;justify-content:space-between;}
+  .kanban-card{
+    background:var(--white);border:1px solid var(--line);border-radius:8px;padding:10px;margin-bottom:8px;
+    font-size:13px;cursor:pointer;
+  }
+  .kanban-card:hover{border-color:var(--sage);}
+  .kanban-card .titulo{font-weight:600;margin-bottom:4px;}
+  .kanban-card .meta{display:flex;justify-content:space-between;align-items:center;margin-top:6px;font-size:11px;color:var(--stone);}
+
+  /* ---------- Calendario ---------- */
+  .cal-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;}
+  .cal-header h2{font-size:16px;margin:0;text-transform:capitalize;}
+  .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;}
+  .cal-dow{font-size:11px;color:var(--stone);text-align:center;padding:4px 0;text-transform:uppercase;}
+  .cal-cell{
+    background:var(--white);border:1px solid var(--line);border-radius:8px;min-height:90px;
+    padding:6px;font-size:12px;position:relative;
+  }
+  .cal-cell.other-month{opacity:.35;}
+  .cal-cell.today{border-color:var(--sage);border-width:2px;}
+  .cal-daynum{font-size:11px;color:var(--stone);margin-bottom:4px;}
+  .cal-item{
+    background:#F0EDE5;border-radius:5px;padding:2px 5px;margin-bottom:3px;font-size:10.5px;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;
+  }
+  .cal-item.completado{opacity:.5;text-decoration:line-through;}
+  .cal-item.overdue{background:#F7E9E5;color:var(--red);}
+
+  /* ---------- Modal ---------- */
+  .overlay{
+    position:fixed;inset:0;background:rgba(43,43,40,0.4);display:flex;align-items:center;justify-content:center;
+    z-index:100;padding:20px;
+  }
+  .modal{
+    background:var(--white);border-radius:var(--radius);padding:24px;width:480px;max-width:100%;
+    max-height:90vh;overflow-y:auto;
+  }
+  .modal h2{font-size:16px;margin:0 0 18px;}
+  .field{margin-bottom:14px;}
+  .field label{display:block;font-size:12px;font-weight:600;color:var(--stone);margin-bottom:5px;}
+  .field input, .field select, .field textarea{width:100%;}
+  .field textarea{min-height:70px;resize:vertical;}
+  .field-row{display:flex;gap:10px;}
+  .field-row .field{flex:1;}
+  .modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:20px;}
+
+  .color-dot{width:9px;height:9px;border-radius:50%;display:inline-block;margin-right:6px;}
+
+  @media (max-width: 800px){
+    .kanban{grid-template-columns:1fr;}
+    .project-bar{flex-direction:column;align-items:stretch;}
+    .view-tabs{margin-left:0;}
+    table{font-size:12px;}
+    th,td{padding:8px 6px;}
+  }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel">
+const { useState, useEffect, useMemo } = React;
+
+// ============================================================
+// CONFIGURACIÓN — reemplaza con tu proyecto Supabase
+// ============================================================
+const SUPABASE_URL = "TU_SUPABASE_URL";
+const SUPABASE_ANON_KEY = "TU_SUPABASE_ANON_KEY";
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+const TEAM = ["Maru", "Rodrigo", "Miriam", "Alex", "Fernando"];
+
+const ESTADOS = [
+  { key: "pendiente", label: "Pendiente" },
+  { key: "en_progreso", label: "En progreso" },
+  { key: "completado", label: "Completado" },
+  { key: "bloqueado", label: "Bloqueado" },
+];
+
+const PRIORIDADES = ["alta", "media", "baja"];
+
+const PROJECT_COLORS = ["#5B7B6B", "#4A6B8A", "#C08A3E", "#B4553F", "#8B7BA8", "#5B9B8A"];
+
+function initials(name) {
+  return name.slice(0, 2).toUpperCase();
+}
+
+function todayISO() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function isOverdue(activity) {
+  return activity.fecha_limite && activity.fecha_limite < todayISO() && activity.estado !== "completado";
+}
+
+// ============================================================
+// LOGIN
+// ============================================================
+function Login({ onLogin }) {
+  return (
+    <div className="login-screen">
+      <div className="login-card">
+        <h1>Seguimiento de Proyectos</h1>
+        <p>La Sin Gluten · selecciona tu usuario</p>
+        {TEAM.map((name) => (
+          <button key={name} className="user-btn" onClick={() => onLogin(name)}>
+            <span className="avatar" style={{ marginRight: 8 }}>{initials(name)}</span>
+            {name}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// MODAL: Nuevo / Editar Proyecto
+// ============================================================
+function ProjectModal({ project, onClose, onSave }) {
+  const [nombre, setNombre] = useState(project?.nombre || "");
+  const [descripcion, setDescripcion] = useState(project?.descripcion || "");
+  const [estado, setEstado] = useState(project?.estado || "activo");
+  const [color, setColor] = useState(project?.color || PROJECT_COLORS[0]);
+
+  return (
+    <div className="overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="modal">
+        <h2>{project ? "Editar proyecto" : "Nuevo proyecto"}</h2>
+        <div className="field">
+          <label>Nombre</label>
+          <input value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Ej. Relanzamiento empaque" />
+        </div>
+        <div className="field">
+          <label>Descripción</label>
+          <textarea value={descripcion} onChange={(e) => setDescripcion(e.target.value)} />
+        </div>
+        <div className="field-row">
+          <div className="field">
+            <label>Estado</label>
+            <select value={estado} onChange={(e) => setEstado(e.target.value)}>
+              <option value="activo">Activo</option>
+              <option value="pausado">Pausado</option>
+              <option value="completado">Completado</option>
+              <option value="archivado">Archivado</option>
+            </select>
+          </div>
+          <div className="field">
+            <label>Color</label>
+            <select value={color} onChange={(e) => setColor(e.target.value)}>
+              {PROJECT_COLORS.map((c) => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+        <div className="modal-actions">
+          <button className="btn secondary" onClick={onClose}>Cancelar</button>
+          <button
+            className="btn"
+            onClick={() => {
+              if (!nombre.trim()) return;
+              onSave({ nombre, descripcion, estado, color });
+            }}
+          >
+            Guardar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// MODAL: Nueva / Editar Actividad
+// ============================================================
+function ActivityModal({ activity, currentUser, onClose, onSave, onDelete }) {
+  const [titulo, setTitulo] = useState(activity?.titulo || "");
+  const [descripcion, setDescripcion] = useState(activity?.descripcion || "");
+  const [responsable, setResponsable] = useState(activity?.responsable || currentUser);
+  const [fecha_limite, setFecha] = useState(activity?.fecha_limite || "");
+  const [prioridad, setPrioridad] = useState(activity?.prioridad || "media");
+  const [estado, setEstado] = useState(activity?.estado || "pendiente");
+
+  return (
+    <div className="overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="modal">
+        <h2>{activity ? "Editar actividad" : "Nueva actividad"}</h2>
+        <div className="field">
+          <label>Título</label>
+          <input value={titulo} onChange={(e) => setTitulo(e.target.value)} placeholder="Ej. Enviar cotización a proveedor" />
+        </div>
+        <div className="field">
+          <label>Descripción</label>
+          <textarea value={descripcion} onChange={(e) => setDescripcion(e.target.value)} />
+        </div>
+        <div className="field-row">
+          <div className="field">
+            <label>Responsable</label>
+            <select value={responsable} onChange={(e) => setResponsable(e.target.value)}>
+              {TEAM.map((n) => <option key={n} value={n}>{n}</option>)}
+            </select>
+          </div>
+          <div className="field">
+            <label>Fecha límite</label>
+            <input type="date" value={fecha_limite} onChange={(e) => setFecha(e.target.value)} />
+          </div>
+        </div>
+        <div className="field-row">
+          <div className="field">
+            <label>Prioridad</label>
+            <select value={prioridad} onChange={(e) => setPrioridad(e.target.value)}>
+              {PRIORIDADES.map((p) => <option key={p} value={p}>{p}</option>)}
+            </select>
+          </div>
+          <div className="field">
+            <label>Estado</label>
+            <select value={estado} onChange={(e) => setEstado(e.target.value)}>
+              {ESTADOS.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
+            </select>
+          </div>
+        </div>
+        <div className="modal-actions">
+          {activity && (
+            <button className="btn danger" style={{ marginRight: "auto" }} onClick={() => onDelete(activity.id)}>
+              Eliminar
+            </button>
+          )}
+          <button className="btn secondary" onClick={onClose}>Cancelar</button>
+          <button
+            className="btn"
+            onClick={() => {
+              if (!titulo.trim()) return;
+              onSave({ titulo, descripcion, responsable, fecha_limite: fecha_limite || null, prioridad, estado });
+            }}
+          >
+            Guardar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// VISTA: Lista
+// ============================================================
+function ListaView({ activities, onEdit }) {
+  const [filterResp, setFilterResp] = useState("todos");
+  const [filterEstado, setFilterEstado] = useState("todos");
+  const [sortBy, setSortBy] = useState("fecha_limite");
+
+  const filtered = useMemo(() => {
+    let list = activities.filter((a) => {
+      if (filterResp !== "todos" && a.responsable !== filterResp) return false;
+      if (filterEstado !== "todos" && a.estado !== filterEstado) return false;
+      return true;
+    });
+    list.sort((a, b) => {
+      if (sortBy === "fecha_limite") {
+        return (a.fecha_limite || "9999").localeCompare(b.fecha_limite || "9999");
+      }
+      return (a[sortBy] || "").localeCompare(b[sortBy] || "");
+    });
+    return list;
+  }, [activities, filterResp, filterEstado, sortBy]);
+
+  return (
+    <div>
+      <div className="filters">
+        <select value={filterResp} onChange={(e) => setFilterResp(e.target.value)}>
+          <option value="todos">Todos los responsables</option>
+          {TEAM.map((n) => <option key={n} value={n}>{n}</option>)}
+        </select>
+        <select value={filterEstado} onChange={(e) => setFilterEstado(e.target.value)}>
+          <option value="todos">Todos los estados</option>
+          {ESTADOS.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
+        </select>
+        <select value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
+          <option value="fecha_limite">Ordenar por fecha</option>
+          <option value="responsable">Ordenar por responsable</option>
+          <option value="titulo">Ordenar por título</option>
+        </select>
+      </div>
+      {filtered.length === 0 ? (
+        <div className="empty">No hay actividades con estos filtros.</div>
+      ) : (
+        <table>
+          <thead>
+            <tr>
+              <th>Título</th>
+              <th>Responsable</th>
+              <th>Fecha límite</th>
+              <th>Prioridad</th>
+              <th>Estado</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.map((a) => (
+              <tr key={a.id} className={isOverdue(a) ? "overdue" : ""}>
+                <td>{a.titulo}</td>
+                <td>{a.responsable}</td>
+                <td className="fecha">{a.fecha_limite || "—"}</td>
+                <td><span className={`badge ${a.prioridad}`}>{a.prioridad}</span></td>
+                <td><span className={`badge ${a.estado}`}>{ESTADOS.find(s => s.key === a.estado)?.label}</span></td>
+                <td className="row-actions">
+                  <button className="icon-btn" onClick={() => onEdit(a)}>✏️</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}
+
+// ============================================================
+// VISTA: Kanban
+// ============================================================
+function KanbanView({ activities, onEdit, onQuickMove }) {
+  return (
+    <div className="kanban">
+      {ESTADOS.map((col) => {
+        const items = activities.filter((a) => a.estado === col.key);
+        return (
+          <div className="kanban-col" key={col.key}>
+            <h3>{col.label} <span>{items.length}</span></h3>
+            {items.map((a) => (
+              <div className="kanban-card" key={a.id} onClick={() => onEdit(a)}>
+                <div className="titulo">{a.titulo}</div>
+                <div className="meta">
+                  <span>{a.responsable}</span>
+                  <span className={isOverdue(a) ? "overdue" : ""} style={isOverdue(a) ? { color: "var(--red)", fontWeight: 600 } : {}}>
+                    {a.fecha_limite || "sin fecha"}
+                  </span>
+                </div>
+              </div>
+            ))}
+            {items.length === 0 && <div style={{ fontSize: 12, color: "var(--stone)" }}>Sin actividades</div>}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ============================================================
+// VISTA: Calendario
+// ============================================================
+function CalendarView({ activities, onEdit }) {
+  const [cursor, setCursor] = useState(new Date());
+
+  const year = cursor.getFullYear();
+  const month = cursor.getMonth();
+  const firstDay = new Date(year, month, 1);
+  const startOffset = (firstDay.getDay() + 6) % 7; // lunes=0
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const daysInPrevMonth = new Date(year, month, 0).getDate();
+
+  const cells = [];
+  for (let i = startOffset; i > 0; i--) {
+    cells.push({ day: daysInPrevMonth - i + 1, otherMonth: true });
+  }
+  for (let d = 1; d <= daysInMonth; d++) {
+    cells.push({ day: d, otherMonth: false, date: new Date(year, month, d) });
+  }
+  while (cells.length % 7 !== 0) {
+    cells.push({ day: cells.length, otherMonth: true });
+  }
+
+  const monthLabel = cursor.toLocaleDateString("es-ES", { month: "long", year: "numeric" });
+  const today = todayISO();
+
+  function dateISO(d) {
+    return d.toISOString().slice(0, 10);
+  }
+
+  return (
+    <div>
+      <div className="cal-header">
+        <button className="btn secondary small" onClick={() => setCursor(new Date(year, month - 1, 1))}>← Anterior</button>
+        <h2>{monthLabel}</h2>
+        <button className="btn secondary small" onClick={() => setCursor(new Date(year, month + 1, 1))}>Siguiente →</button>
+      </div>
+      <div className="cal-grid">
+        {["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"].map((d) => (
+          <div className="cal-dow" key={d}>{d}</div>
+        ))}
+        {cells.map((cell, i) => {
+          const iso = cell.date ? dateISO(cell.date) : null;
+          const dayActivities = iso ? activities.filter((a) => a.fecha_limite === iso) : [];
+          return (
+            <div key={i} className={`cal-cell ${cell.otherMonth ? "other-month" : ""} ${iso === today ? "today" : ""}`}>
+              <div className="cal-daynum">{cell.day}</div>
+              {dayActivities.map((a) => (
+                <div
+                  key={a.id}
+                  className={`cal-item ${a.estado} ${isOverdue(a) ? "overdue" : ""}`}
+                  title={`${a.titulo} · ${a.responsable}`}
+                  onClick={() => onEdit(a)}
+                >
+                  {a.titulo}
+                </div>
+              ))}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// APP PRINCIPAL
+// ============================================================
+function App() {
+  const [user, setUser] = useState(() => localStorage.getItem("seg_user") || null);
+  const [projects, setProjects] = useState([]);
+  const [activeProjectId, setActiveProjectId] = useState(null);
+  const [activities, setActivities] = useState([]);
+  const [view, setView] = useState("lista");
+  const [showProjectModal, setShowProjectModal] = useState(false);
+  const [editingProject, setEditingProject] = useState(null);
+  const [showActivityModal, setShowActivityModal] = useState(false);
+  const [editingActivity, setEditingActivity] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (user) loadProjects();
+  }, [user]);
+
+  useEffect(() => {
+    if (activeProjectId) loadActivities(activeProjectId);
+    else setActivities([]);
+  }, [activeProjectId]);
+
+  async function loadProjects() {
+    setLoading(true);
+    const { data, error } = await supabase
+      .from("seg_projects")
+      .select("*")
+      .neq("estado", "archivado")
+      .order("created_at", { ascending: false });
+    if (!error && data) {
+      setProjects(data);
+      if (data.length > 0 && !activeProjectId) setActiveProjectId(data[0].id);
+    }
+    setLoading(false);
+  }
+
+  async function loadActivities(projectId) {
+    const { data, error } = await supabase
+      .from("seg_activities")
+      .select("*")
+      .eq("project_id", projectId)
+      .order("fecha_limite", { ascending: true });
+    if (!error && data) setActivities(data);
+  }
+
+  function login(name) {
+    localStorage.setItem("seg_user", name);
+    setUser(name);
+  }
+
+  function logout() {
+    localStorage.removeItem("seg_user");
+    setUser(null);
+  }
+
+  async function saveProject(fields) {
+    if (editingProject) {
+      await supabase.from("seg_projects").update(fields).eq("id", editingProject.id);
+    } else {
+      await supabase.from("seg_projects").insert({ ...fields, created_by: user });
+    }
+    setShowProjectModal(false);
+    setEditingProject(null);
+    loadProjects();
+  }
+
+  async function saveActivity(fields) {
+    if (editingActivity) {
+      await supabase.from("seg_activities").update(fields).eq("id", editingActivity.id);
+    } else {
+      await supabase.from("seg_activities").insert({ ...fields, project_id: activeProjectId, created_by: user });
+    }
+    setShowActivityModal(false);
+    setEditingActivity(null);
+    loadActivities(activeProjectId);
+  }
+
+  async function deleteActivity(id) {
+    await supabase.from("seg_activities").delete().eq("id", id);
+    setShowActivityModal(false);
+    setEditingActivity(null);
+    loadActivities(activeProjectId);
+  }
+
+  if (!user) return <Login onLogin={login} />;
+
+  const activeProject = projects.find((p) => p.id === activeProjectId);
+
+  return (
+    <React.Fragment>
+      <div className="topbar">
+        <div className="topbar-left">
+          <span className="brand">📋 Seguimiento de Proyectos</span>
+        </div>
+        <div className="user-chip">
+          <span className="avatar">{initials(user)}</span>
+          {user}
+          <button className="logout" onClick={logout}>salir</button>
+        </div>
+      </div>
+
+      <div className="project-bar">
+        <select
+          className="project-select"
+          value={activeProjectId || ""}
+          onChange={(e) => setActiveProjectId(e.target.value)}
+        >
+          {projects.length === 0 && <option value="">Sin proyectos aún</option>}
+          {projects.map((p) => (
+            <option key={p.id} value={p.id}>{p.nombre}</option>
+          ))}
+        </select>
+        <button className="btn secondary small" onClick={() => { setEditingProject(null); setShowProjectModal(true); }}>
+          + Nuevo proyecto
+        </button>
+        {activeProject && (
+          <button className="btn secondary small" onClick={() => { setEditingProject(activeProject); setShowProjectModal(true); }}>
+            Editar proyecto
+          </button>
+        )}
+        {activeProjectId && (
+          <button className="btn small" onClick={() => { setEditingActivity(null); setShowActivityModal(true); }}>
+            + Nueva actividad
+          </button>
+        )}
+
+        <div className="view-tabs">
+          <span className={`view-tab ${view === "lista" ? "active" : ""}`} onClick={() => setView("lista")}>Lista</span>
+          <span className={`view-tab ${view === "kanban" ? "active" : ""}`} onClick={() => setView("kanban")}>Kanban</span>
+          <span className={`view-tab ${view === "calendario" ? "active" : ""}`} onClick={() => setView("calendario")}>Calendario</span>
+        </div>
+      </div>
+
+      <main>
+        {loading ? (
+          <div className="empty">Cargando…</div>
+        ) : !activeProjectId ? (
+          <div className="empty">Crea tu primer proyecto para empezar a dar seguimiento.</div>
+        ) : (
+          <React.Fragment>
+            {view === "lista" && <ListaView activities={activities} onEdit={(a) => { setEditingActivity(a); setShowActivityModal(true); }} />}
+            {view === "kanban" && <KanbanView activities={activities} onEdit={(a) => { setEditingActivity(a); setShowActivityModal(true); }} />}
+            {view === "calendario" && <CalendarView activities={activities} onEdit={(a) => { setEditingActivity(a); setShowActivityModal(true); }} />}
+          </React.Fragment>
+        )}
+      </main>
+
+      {showProjectModal && (
+        <ProjectModal
+          project={editingProject}
+          onClose={() => { setShowProjectModal(false); setEditingProject(null); }}
+          onSave={saveProject}
+        />
+      )}
+      {showActivityModal && (
+        <ActivityModal
+          activity={editingActivity}
+          currentUser={user}
+          onClose={() => { setShowActivityModal(false); setEditingActivity(null); }}
+          onSave={saveActivity}
+          onDelete={deleteActivity}
+        />
+      )}
+    </React.Fragment>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
