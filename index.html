@@ -104,6 +104,8 @@
   th{background:#FAFAF7;color:var(--stone);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.03em;}
   tr:last-child td{border-bottom:none;}
   tr.overdue td.fecha{color:var(--red);font-weight:600;}
+  tr.subtask-row-table{background:#FAFAF7;}
+  tr.subtask-row-table td{padding-top:6px;padding-bottom:6px;border-bottom:1px dashed var(--line);}
 
   .badge{
     display:inline-block;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:600;
@@ -515,10 +517,15 @@ function ActivityModal({ activity, currentUser, onClose, onSave, onDelete }) {
 // ============================================================
 // VISTA: Lista
 // ============================================================
-function ListaView({ activities, subtaskCounts, onEdit }) {
+function ListaView({ activities, subtasksByActivity, onEdit }) {
   const [filterResp, setFilterResp] = useState("todos");
   const [filterEstado, setFilterEstado] = useState("todos");
   const [sortBy, setSortBy] = useState("fecha_limite");
+  const [expanded, setExpanded] = useState({});
+
+  function toggleExpand(id) {
+    setExpanded({ ...expanded, [id]: !expanded[id] });
+  }
 
   const filtered = useMemo(() => {
     let list = activities.filter((a) => {
@@ -567,25 +574,54 @@ function ListaView({ activities, subtaskCounts, onEdit }) {
             </tr>
           </thead>
           <tbody>
-            {filtered.map((a) => (
-              <tr key={a.id} className={isOverdue(a) ? "overdue" : ""}>
-                <td>
-                  {a.titulo}
-                  {subtaskCounts[a.id] && (
-                    <span style={{ marginLeft: 6, fontSize: 11, color: "var(--stone)" }}>
-                      ({subtaskCounts[a.id].completado}/{subtaskCounts[a.id].total})
-                    </span>
-                  )}
-                </td>
-                <td>{a.responsable}</td>
-                <td className="fecha">{a.fecha_limite || "—"}</td>
-                <td><span className={`badge ${a.prioridad}`}>{a.prioridad}</span></td>
-                <td><span className={`badge ${a.estado}`}>{ESTADOS.find(s => s.key === a.estado)?.label}</span></td>
-                <td className="row-actions">
-                  <button className="icon-btn" onClick={() => onEdit(a)}>✏️</button>
-                </td>
-              </tr>
-            ))}
+            {filtered.map((a) => {
+              const subs = subtasksByActivity[a.id] || [];
+              const isExpanded = !!expanded[a.id];
+              return (
+                <React.Fragment key={a.id}>
+                  <tr className={isOverdue(a) ? "overdue" : ""}>
+                    <td>
+                      {subs.length > 0 ? (
+                        <span
+                          onClick={() => toggleExpand(a.id)}
+                          style={{ cursor: "pointer", display: "inline-block", width: 14, color: "var(--stone)" }}
+                        >
+                          {isExpanded ? "▾" : "▸"}
+                        </span>
+                      ) : (
+                        <span style={{ display: "inline-block", width: 14 }}></span>
+                      )}
+                      {a.titulo}
+                      {subs.length > 0 && (
+                        <span
+                          style={{ marginLeft: 6, fontSize: 11, color: "var(--stone)", cursor: "pointer" }}
+                          onClick={() => toggleExpand(a.id)}
+                        >
+                          ({subs.filter((s) => s.estado === "completado").length}/{subs.length})
+                        </span>
+                      )}
+                    </td>
+                    <td>{a.responsable}</td>
+                    <td className="fecha">{a.fecha_limite || "—"}</td>
+                    <td><span className={`badge ${a.prioridad}`}>{a.prioridad}</span></td>
+                    <td><span className={`badge ${a.estado}`}>{ESTADOS.find(s => s.key === a.estado)?.label}</span></td>
+                    <td className="row-actions">
+                      <button className="icon-btn" onClick={() => onEdit(a)}>✏️</button>
+                    </td>
+                  </tr>
+                  {isExpanded && subs.map((s) => (
+                    <tr key={s.id} className="subtask-row-table">
+                      <td style={{ paddingLeft: 34, fontSize: 12.5, color: "var(--stone)" }}>↳ {s.titulo}</td>
+                      <td style={{ fontSize: 12.5, color: "var(--stone)" }}>{s.responsable || "—"}</td>
+                      <td className="fecha" style={{ fontSize: 12.5 }}>{s.fecha_limite || "—"}</td>
+                      <td><span className={`badge ${s.prioridad}`}>{s.prioridad}</span></td>
+                      <td><span className={`badge ${s.estado}`}>{ESTADOS.find(es => es.key === s.estado)?.label}</span></td>
+                      <td></td>
+                    </tr>
+                  ))}
+                </React.Fragment>
+              );
+            })}
           </tbody>
         </table>
       )}
@@ -596,7 +632,7 @@ function ListaView({ activities, subtaskCounts, onEdit }) {
 // ============================================================
 // VISTA: Kanban
 // ============================================================
-function KanbanView({ activities, subtaskCounts, onEdit, onQuickMove }) {
+function KanbanView({ activities, subtasksByActivity, onEdit, onQuickMove }) {
   return (
     <div className="kanban">
       {ESTADOS.map((col) => {
@@ -604,24 +640,27 @@ function KanbanView({ activities, subtaskCounts, onEdit, onQuickMove }) {
         return (
           <div className="kanban-col" key={col.key}>
             <h3>{col.label} <span>{items.length}</span></h3>
-            {items.map((a) => (
-              <div className="kanban-card" key={a.id} onClick={() => onEdit(a)}>
-                <div className="titulo">
-                  {a.titulo}
-                  {subtaskCounts[a.id] && (
-                    <span style={{ marginLeft: 6, fontSize: 11, color: "var(--stone)", fontWeight: 400 }}>
-                      ({subtaskCounts[a.id].completado}/{subtaskCounts[a.id].total})
+            {items.map((a) => {
+              const subs = subtasksByActivity[a.id] || [];
+              return (
+                <div className="kanban-card" key={a.id} onClick={() => onEdit(a)}>
+                  <div className="titulo">
+                    {a.titulo}
+                    {subs.length > 0 && (
+                      <span style={{ marginLeft: 6, fontSize: 11, color: "var(--stone)", fontWeight: 400 }}>
+                        ({subs.filter((s) => s.estado === "completado").length}/{subs.length})
+                      </span>
+                    )}
+                  </div>
+                  <div className="meta">
+                    <span>{a.responsable}</span>
+                    <span className={isOverdue(a) ? "overdue" : ""} style={isOverdue(a) ? { color: "var(--red)", fontWeight: 600 } : {}}>
+                      {a.fecha_limite || "sin fecha"}
                     </span>
-                  )}
+                  </div>
                 </div>
-                <div className="meta">
-                  <span>{a.responsable}</span>
-                  <span className={isOverdue(a) ? "overdue" : ""} style={isOverdue(a) ? { color: "var(--red)", fontWeight: 600 } : {}}>
-                    {a.fecha_limite || "sin fecha"}
-                  </span>
-                </div>
-              </div>
-            ))}
+              );
+            })}
             {items.length === 0 && <div style={{ fontSize: 12, color: "var(--stone)" }}>Sin actividades</div>}
           </div>
         );
@@ -704,7 +743,7 @@ function App() {
   const [projects, setProjects] = useState([]);
   const [activeProjectId, setActiveProjectId] = useState(null);
   const [activities, setActivities] = useState([]);
-  const [subtaskCounts, setSubtaskCounts] = useState({});
+  const [subtasksByActivity, setSubtasksByActivity] = useState({});
   const [view, setView] = useState("lista");
   const [showProjectModal, setShowProjectModal] = useState(false);
   const [editingProject, setEditingProject] = useState(null);
@@ -743,27 +782,27 @@ function App() {
       .order("fecha_limite", { ascending: true });
     if (!error && data) {
       setActivities(data);
-      loadSubtaskCounts(data.map((a) => a.id));
+      loadSubtasksData(data.map((a) => a.id));
     }
   }
 
-  async function loadSubtaskCounts(activityIds) {
+  async function loadSubtasksData(activityIds) {
     if (!activityIds || activityIds.length === 0) {
-      setSubtaskCounts({});
+      setSubtasksByActivity({});
       return;
     }
     const { data, error } = await supabase
       .from("seg_subtasks")
-      .select("activity_id, estado")
-      .in("activity_id", activityIds);
+      .select("*")
+      .in("activity_id", activityIds)
+      .order("created_at", { ascending: true });
     if (!error && data) {
-      const counts = {};
+      const grouped = {};
       data.forEach((s) => {
-        if (!counts[s.activity_id]) counts[s.activity_id] = { total: 0, completado: 0 };
-        counts[s.activity_id].total += 1;
-        if (s.estado === "completado") counts[s.activity_id].completado += 1;
+        if (!grouped[s.activity_id]) grouped[s.activity_id] = [];
+        grouped[s.activity_id].push(s);
       });
-      setSubtaskCounts(counts);
+      setSubtasksByActivity(grouped);
     }
   }
 
@@ -873,8 +912,8 @@ function App() {
           <div className="empty">Crea tu primer proyecto para empezar a dar seguimiento.</div>
         ) : (
           <React.Fragment>
-            {view === "lista" && <ListaView activities={activities} subtaskCounts={subtaskCounts} onEdit={(a) => { setEditingActivity(a); setShowActivityModal(true); }} />}
-            {view === "kanban" && <KanbanView activities={activities} subtaskCounts={subtaskCounts} onEdit={(a) => { setEditingActivity(a); setShowActivityModal(true); }} />}
+            {view === "lista" && <ListaView activities={activities} subtasksByActivity={subtasksByActivity} onEdit={(a) => { setEditingActivity(a); setShowActivityModal(true); }} />}
+            {view === "kanban" && <KanbanView activities={activities} subtasksByActivity={subtasksByActivity} onEdit={(a) => { setEditingActivity(a); setShowActivityModal(true); }} />}
             {view === "calendario" && <CalendarView activities={activities} onEdit={(a) => { setEditingActivity(a); setShowActivityModal(true); }} />}
           </React.Fragment>
         )}
