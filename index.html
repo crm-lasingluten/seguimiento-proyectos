@@ -171,6 +171,20 @@
 
   .color-dot{width:9px;height:9px;border-radius:50%;display:inline-block;margin-right:6px;}
 
+  .subtasks-group{
+    border:1px solid var(--line);border-radius:8px;padding:10px;background:#FAFAF7;
+    max-height:280px;overflow-y:auto;
+  }
+  .subtask-item{
+    border-bottom:1px dashed var(--line);padding-bottom:8px;margin-bottom:8px;
+  }
+  .subtask-item:last-child{border-bottom:none;margin-bottom:0;padding-bottom:0;}
+  .subtask-item.subtask-new{border-bottom:none;margin-top:4px;padding-top:8px;border-top:1px solid var(--line);}
+  .subtask-row{display:flex;gap:6px;margin-bottom:6px;align-items:center;}
+  .subtask-row:last-child{margin-bottom:0;}
+  .subtask-row select, .subtask-row input[type="date"]{font-size:11.5px;padding:5px 6px;flex:1;min-width:0;}
+  .subtask-row input:not([type="date"]){font-size:13px;}
+
   @media (max-width: 800px){
     .kanban{grid-template-columns:1fr;}
     .project-bar{flex-direction:column;align-items:stretch;}
@@ -309,7 +323,9 @@ function ActivityModal({ activity, currentUser, onClose, onSave, onDelete }) {
   const [estado, setEstado] = useState(activity?.estado || "pendiente");
 
   const [subtasks, setSubtasks] = useState([]);
-  const [newSubtask, setNewSubtask] = useState("");
+  const [newSubtask, setNewSubtask] = useState({
+    titulo: "", responsable: currentUser, fecha_limite: "", prioridad: "media", estado: "pendiente",
+  });
 
   useEffect(() => {
     if (activity?.id) loadSubtasks();
@@ -325,26 +341,33 @@ function ActivityModal({ activity, currentUser, onClose, onSave, onDelete }) {
   }
 
   async function addSubtask() {
-    if (!newSubtask.trim() || !activity?.id) return;
+    if (!newSubtask.titulo.trim() || !activity?.id) return;
     const { data, error } = await supabase
       .from("seg_subtasks")
-      .insert({ activity_id: activity.id, titulo: newSubtask.trim() })
+      .insert({
+        activity_id: activity.id,
+        titulo: newSubtask.titulo.trim(),
+        responsable: newSubtask.responsable,
+        fecha_limite: newSubtask.fecha_limite || null,
+        prioridad: newSubtask.prioridad,
+        estado: newSubtask.estado,
+      })
       .select()
       .single();
     if (!error && data) {
       setSubtasks([...subtasks, data]);
-      setNewSubtask("");
+      setNewSubtask({ titulo: "", responsable: currentUser, fecha_limite: "", prioridad: "media", estado: "pendiente" });
     }
   }
 
-  async function toggleSubtask(sub) {
+  async function updateSubtask(id, fields) {
     const { data, error } = await supabase
       .from("seg_subtasks")
-      .update({ completado: !sub.completado })
-      .eq("id", sub.id)
+      .update(fields)
+      .eq("id", id)
       .select()
       .single();
-    if (!error && data) setSubtasks(subtasks.map((s) => (s.id === sub.id ? data : s)));
+    if (!error && data) setSubtasks(subtasks.map((s) => (s.id === id ? data : s)));
   }
 
   async function deleteSubtask(id) {
@@ -395,7 +418,7 @@ function ActivityModal({ activity, currentUser, onClose, onSave, onDelete }) {
             Subactividades
             {subtasks.length > 0 && (
               <span style={{ fontWeight: 400, color: "var(--stone)" }}>
-                {" "}({subtasks.filter((s) => s.completado).length}/{subtasks.length})
+                {" "}({subtasks.filter((s) => s.estado === "completado").length}/{subtasks.length})
               </span>
             )}
           </label>
@@ -404,31 +427,67 @@ function ActivityModal({ activity, currentUser, onClose, onSave, onDelete }) {
               Guarda la actividad primero para poder agregar subactividades.
             </div>
           ) : (
-            <React.Fragment>
+            <div className="subtasks-group">
               {subtasks.map((s) => (
-                <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-                  <input type="checkbox" checked={s.completado} onChange={() => toggleSubtask(s)} />
-                  <span style={{
-                    flex: 1, fontSize: 13,
-                    textDecoration: s.completado ? "line-through" : "none",
-                    color: s.completado ? "var(--stone)" : "var(--charcoal)",
-                  }}>
-                    {s.titulo}
-                  </span>
-                  <button className="icon-btn" onClick={() => deleteSubtask(s.id)}>✕</button>
+                <div key={s.id} className="subtask-item">
+                  <div className="subtask-row">
+                    <input
+                      style={{ flex: 1 }}
+                      value={s.titulo}
+                      onChange={(e) => setSubtasks(subtasks.map((x) => (x.id === s.id ? { ...x, titulo: e.target.value } : x)))}
+                      onBlur={(e) => updateSubtask(s.id, { titulo: e.target.value })}
+                    />
+                    <button className="icon-btn" onClick={() => deleteSubtask(s.id)}>✕</button>
+                  </div>
+                  <div className="subtask-row">
+                    <select value={s.responsable || ""} onChange={(e) => updateSubtask(s.id, { responsable: e.target.value })}>
+                      <option value="">Sin asignar</option>
+                      {RESPONSABLES.map((n) => <option key={n} value={n}>{n}</option>)}
+                    </select>
+                    <input
+                      type="date"
+                      value={s.fecha_limite || ""}
+                      onChange={(e) => updateSubtask(s.id, { fecha_limite: e.target.value || null })}
+                    />
+                    <select value={s.prioridad} onChange={(e) => updateSubtask(s.id, { prioridad: e.target.value })}>
+                      {PRIORIDADES.map((p) => <option key={p} value={p}>{p}</option>)}
+                    </select>
+                    <select value={s.estado} onChange={(e) => updateSubtask(s.id, { estado: e.target.value })}>
+                      {ESTADOS.map((es) => <option key={es.key} value={es.key}>{es.label}</option>)}
+                    </select>
+                  </div>
                 </div>
               ))}
-              <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
-                <input
-                  style={{ flex: 1 }}
-                  value={newSubtask}
-                  onChange={(e) => setNewSubtask(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && addSubtask()}
-                  placeholder="Nueva subactividad"
-                />
-                <button className="btn secondary small" onClick={addSubtask}>+ Agregar</button>
+
+              <div className="subtask-item subtask-new">
+                <div className="subtask-row">
+                  <input
+                    style={{ flex: 1 }}
+                    value={newSubtask.titulo}
+                    onChange={(e) => setNewSubtask({ ...newSubtask, titulo: e.target.value })}
+                    onKeyDown={(e) => e.key === "Enter" && addSubtask()}
+                    placeholder="Nueva subactividad"
+                  />
+                </div>
+                <div className="subtask-row">
+                  <select value={newSubtask.responsable} onChange={(e) => setNewSubtask({ ...newSubtask, responsable: e.target.value })}>
+                    {RESPONSABLES.map((n) => <option key={n} value={n}>{n}</option>)}
+                  </select>
+                  <input
+                    type="date"
+                    value={newSubtask.fecha_limite}
+                    onChange={(e) => setNewSubtask({ ...newSubtask, fecha_limite: e.target.value })}
+                  />
+                  <select value={newSubtask.prioridad} onChange={(e) => setNewSubtask({ ...newSubtask, prioridad: e.target.value })}>
+                    {PRIORIDADES.map((p) => <option key={p} value={p}>{p}</option>)}
+                  </select>
+                  <select value={newSubtask.estado} onChange={(e) => setNewSubtask({ ...newSubtask, estado: e.target.value })}>
+                    {ESTADOS.map((es) => <option key={es.key} value={es.key}>{es.label}</option>)}
+                  </select>
+                  <button className="btn secondary small" onClick={addSubtask}>+ Agregar</button>
+                </div>
               </div>
-            </React.Fragment>
+            </div>
           )}
         </div>
         <div className="modal-actions">
@@ -695,14 +754,14 @@ function App() {
     }
     const { data, error } = await supabase
       .from("seg_subtasks")
-      .select("activity_id, completado")
+      .select("activity_id, estado")
       .in("activity_id", activityIds);
     if (!error && data) {
       const counts = {};
       data.forEach((s) => {
         if (!counts[s.activity_id]) counts[s.activity_id] = { total: 0, completado: 0 };
         counts[s.activity_id].total += 1;
-        if (s.completado) counts[s.activity_id].completado += 1;
+        if (s.estado === "completado") counts[s.activity_id].completado += 1;
       });
       setSubtaskCounts(counts);
     }
